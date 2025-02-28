@@ -1,0 +1,101 @@
+-- futures_market.lua
+-- A basic simulation of a futures market for Farming Simulator 25
+
+local FuturesMarket = {}
+
+FuturesMarket.contracts = {}
+FuturesMarket.prices = {
+    corn = 500,  -- Initial price per unit
+    wheat = 450,
+    soybeans = 600,
+    -- Add more crops as needed
+}
+FuturesMarket.priceFluctuation = {
+    corn = 0.05, -- 5% fluctuation
+    wheat = 0.04,
+    soybeans = 0.06,
+    -- Match prices
+}
+FuturesMarket.contractDuration = 3600 -- 1 hour in in-game seconds
+FuturesMarket.tickInterval = 60 -- Price updates every 60 in-game seconds
+
+-- Function to create a futures contract
+function FuturesMarket:createContract(cropType, amount, price, duration)
+    if not self.prices[cropType] then
+        print("Invalid crop type.")
+        return
+    end
+
+    local contract = {
+        cropType = cropType,
+        amount = amount,
+        price = price,
+        startTime = g_currentMission.environment:getTime(),
+        duration = duration or self.contractDuration,
+        fulfilled = false,
+    }
+    table.insert(self.contracts, contract)
+    print(string.format("Created futures contract: %d units of %s at %d per unit.", amount, cropType, price))
+end
+
+-- Function to update prices (simulated fluctuation)
+function FuturesMarket:updatePrices()
+    for cropType, price in pairs(self.prices) do
+        local fluctuation = self.priceFluctuation[cropType] or 0.05
+        local change = price * (math.random() * fluctuation * 2 - fluctuation) -- Random fluctuation
+        self.prices[cropType] = math.max(1, price + change) -- Prevent negative prices
+        --print(string.format("%s price updated: %d", cropType, self.prices[cropType])) -- enable for debug
+    end
+end
+
+-- Function to check and fulfill contracts
+function FuturesMarket:checkContracts()
+    local currentTime = g_currentMission.environment:getTime()
+    local fulfilledContracts = {}
+
+    for i, contract in ipairs(self.contracts) do
+        if not contract.fulfilled and currentTime >= contract.startTime + contract.duration then
+            -- Simulate contract fulfillment (e.g., add money)
+            local totalValue = contract.amount * contract.price
+            g_currentMission.player:addMoney(totalValue)
+            contract.fulfilled = true
+            print(string.format("Futures contract fulfilled: %d units of %s for %d.", contract.amount, contract.cropType, totalValue))
+            table.insert(fulfilledContracts, i)
+        end
+    end
+
+    -- Remove fulfilled contracts
+    for i = #fulfilledContracts, 1, -1 do
+        table.remove(self.contracts, fulfilledContracts[i])
+    end
+end
+
+-- Function to be called every tick
+function FuturesMarket:update(dt)
+    self.tickTimer = (self.tickTimer or 0) + dt
+    if self.tickTimer >= self.tickInterval then
+        self.tickTimer = 0
+        self:updatePrices()
+        self:checkContracts()
+    end
+end
+
+-- Example usage (place in your mod's main script or a separate script)
+function onCreateMission()
+    g_currentMission:addUpdateFunction(FuturesMarket.update, FuturesMarket)
+
+    -- Example: Create a contract for 1000 units of corn at 550 per unit, 2 hour duration
+    FuturesMarket:createContract("corn", 1000, 550, 7200)
+
+    -- Example: create a wheat contract for 500 units at 475 per unit.
+    FuturesMarket:createContract("wheat", 500, 475)
+
+    -- Example to check current prices:
+    -- print(FuturesMarket.prices.corn)
+end
+
+-- Register the onCreateMission function
+RegisterMissionEvent(onCreateMission, "onCreateMission")
+
+-- Example usage from the console (in the game)
+-- FuturesMarket:createContract("soybeans", 2000, 620)
